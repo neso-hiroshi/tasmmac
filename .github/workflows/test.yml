@@ -11,24 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dissect working gas binary
-        run: |
-          cat > exit.s << 'ASM'
-          .global _main
-          .align 2
-          _main:
-            mov x0, #0
-            mov x16, #1
-            movk x16, #0x200, lsl #16
-            svc #0x80
-          ASM
-          as -o exit.o exit.s
-          ld -o exit_bin exit.o -lSystem -syslibroot $(xcrun -sdk macosx --show-sdk-path) -e _main -arch arm64
-          otool -hv exit_bin
-          otool -l exit_bin
-
-      - name: Run our binary
+      - name: Run without codesign
         run: |
           chmod +x mc.bin
-          codesign -s - mc.bin
           ./mc.bin
