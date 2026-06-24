@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ЭТАП 1: Вытаскиваем чистый машинный код И данные на Linux
-  extract-code:
+  # ЭТАП 1: Разделяем код и данные на Linux без нарушения структуры вашего main.o
+  extract-sections:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,39 +16,54 @@ jobs:
       - name: Install LLVM
         run: sudo apt-get update && sudo apt-get install -y llvm
 
-      # Вытаскиваем ВЕСЬ бинарный дамп (и код, и данные строки) в один файл
-      - name: Extract full binary dump
+      # Вытаскиваем отдельно чистый код и отдельно чистую строку данных
+      - name: Extract sections
         run: |
-          llvm-objcopy -O binary main.o full_code.bin
+          llvm-objcopy -O binary --only-section=.text main.o text.bin
+          llvm-objcopy -O binary --only-section=.data main.o data.bin
 
-      - name: Upload Binary Code
+      # Передаем оба файла на Mac
+      - name: Upload Binary Sections
         uses: actions/upload-artifact@v4
         with:
-          name: raw-code
-          path: full_code.bin
+          name: raw-sections
+          path: |
+            text.bin
+            data.bin
 
-  # ЭТАП 2: Упаковываем всё в Mach-O на Mac и запускаем
+  # ЭТАП 2: Собираем правильный Mach-O на Mac с раздельными секциями
   link-and-run:
-    needs: extract-code
+    needs: extract-sections
     runs-on: macos-14 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Binary Code
+      - name: Download Binary Sections
         uses: actions/download-artifact@v4
         with:
-          name: raw-code
+          name: raw-sections
 
-      # Обертка, которая включает в себя и код, и строку данных из FASMARM
-      - name: Wrap code into Mach-O
+      # Создаем маковский ассемблерный файл, который раскладывает всё по полочкам
+      - name: Wrap code and data into Mach-O
         run: |
           echo ".global _main" > wrapper.s
+          
+          # Кладем код в секцию исполнения __TEXT
+          echo ".text" >> wrapper.s
           echo ".align 2" >> wrapper.s
           echo "_main:" >> wrapper.s
-          echo ".incbin \"full_code.bin\"" >> wrapper.s
+          echo ".incbin \"text.bin\"" >> wrapper.s
+          
+          # Кладем строку в секцию данных __DATA
+          echo ".data" >> wrapper.s
+          echo ".align 2" >> wrapper.s
+          echo "msg:" >> wrapper.s
+          echo ".incbin \"data.bin\"" >> wrapper.s
+          
           as -o main_macho.o wrapper.s
 
+      # Линкуем чистокровный маковский файл
       - name: Link to Executable
         run: |
           clang -target arm64-apple-macos \
@@ -56,6 +71,6 @@ jobs:
           -Wl,-e,_main \
           main_macho.o -o program
 
+      # Запускаем нативную программу
       - name: Run program
         run: ./program
-
