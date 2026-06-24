@@ -6,29 +6,13 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest  # Apple Silicon runner
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download fasmarm
-        run: |
-          curl -L https://arm.flatassembler.net/FASMARM_FULL.ZIP -o fasmarm.zip
-          unzip fasmarm.zip
-          ls -la
-
-      - name: Assemble
-        run: |
-          ./fasmarm mc.asm mc.bin
-
-      - name: Check file type
-        run: file mc.bin
-
-      - name: Make executable
-        run: chmod +x mc.bin
-
-      - name: Sign (ad-hoc)
-        run: codesign -s - mc.bin
-
       - name: Run
-        run: ./mc.bin
+        run: |
+          chmod +x mc.bin
+          codesign -s - mc.bin
+          ./mc.bin
