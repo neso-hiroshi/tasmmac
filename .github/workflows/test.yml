@@ -1,4 +1,4 @@
-name: Run macOS FASMARM ARM64 (via Apt Objconv)
+name: Run macOS FASMARM ARM64
 
 on:
   push:
@@ -6,32 +6,40 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ЭТАП 1: Устанавливаем objconv из репозитория и конвертируем файл на Linux
+  # ЭТАП 1: Скачиваем зеркало, собираем objconv из исходников на Linux и конвертируем main.o
   convert-via-objconv:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Устанавливаем официальный пакет objconv из репозитория Ubuntu
-      - name: Install objconv via apt
+      # Сборка objconv из стабильного исходного кода
+      - name: Build Objconv from Source Mirror
         run: |
-          sudo apt-get update
-          sudo apt-get install -y objconv
+          sudo apt-get update && sudo apt-get install -y g++ git unzip
+      
+          git clone https://github.com/staticfloat/objconv.git objconv_repo
+          
+          cd objconv_repo
+          unzip source.zip
+          g++ -o objconv -O2 src/*.cpp
+          cp objconv ../objconv
+          cd ..
+          chmod +x objconv
 
-      # Конвертируем ваш готовый main.o из формата ELF64 в Mach-O ARM64 (-fmacho64ar)
+      # Конвертируем твой готовый main.o из формата ELF64 в Mach-O ARM64
       - name: Convert ELF64 to Mach-O
         run: |
-          objconv -fmacho64ar main.o main_macho.o
+          ./objconv -fmacho64ar main.o main_macho.o
 
-      # Передаем готовый объектный файл дальше на Mac
+      # Передаем получившийся файл на этап линковки
       - name: Upload Mach-O Object File
         uses: actions/upload-artifact@v4
         with:
           name: macho-object
           path: main_macho.o
 
-  # ЭТАП 2: Линкуем готовый Mach-O на Mac и запускаем программу
+  # ЭТАП 2: Забираем готовый Mach-O файл на Mac, линкуем и запускаем
   link-and-run:
     needs: convert-via-objconv
     runs-on: macos-14 
@@ -44,7 +52,7 @@ jobs:
         with:
           name: macho-object
 
-      # Линкуем чистокровный маковский объектник, созданный через официальный objconv
+      # Линкуем чистокровный маковский объектник, в котором objconv сохранил все адреса строки
       - name: Link to Executable
         run: |
           clang -target arm64-apple-macos \
@@ -52,7 +60,6 @@ jobs:
           -Wl,-e,_main \
           main_macho.o -o program
 
-      # Финальный запуск
+      # Долгожданный запуск нативной программы
       - name: Run program
         run: ./program
-
