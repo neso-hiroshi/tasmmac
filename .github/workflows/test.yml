@@ -1,64 +1,34 @@
-name: Run macOS FASMARM ARM64 (via LIEF)
+name: Test fasmarm hello world
 
 on:
   push:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
-  # ЭТАП 1: Используем LIEF на Linux для ювелирной конвертации ELF64 -> Mach-O
-  convert-with-lief:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: macos-latest  # Apple Silicon runner
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Ставим Python и библиотеку LIEF
-      - name: Install LIEF
+      - name: Download fasmarm
         run: |
-          pip install lief
+          curl -L https://arm.flatassembler.net/FASMARM_FULL.ZIP -o fasmarm.zip
+          unzip fasmarm.zip
+          ls -la
 
-      # Пишем мини-скрипт на Python, который берет твой main.o,
-      # пересобирает его структуры под Mach-O ARM64 и сохраняет
-      - name: Convert ELF to Mach-O
+      - name: Assemble
         run: |
-          python3 -c "
-          import lief
-          # Загружаем твой линуксовый ELF объектник
-          binary = lief.parse('main.o')
-          # Сохраняем его, принудительно переключая формат в Mach-O ARM64
-          binary.write('main_macho.o')
-          "
+          ./fasmarm mc.asm mc.bin
 
-      # Передаем правильный объектный файл на Mac
-      - name: Upload Mach-O Object File
-        uses: actions/upload-artifact@v4
-        with:
-          name: macho-object
-          path: main_macho.o
+      - name: Check file type
+        run: file mc.bin
 
-  # ЭТАП 2: Линкуем готовый файл на Mac и запускаем
-  link-and-run:
-    needs: convert-with-lief
-    runs-on: macos-14 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Make executable
+        run: chmod +x mc.bin
 
-      # Скачиваем маковский файл, где все адреса adr сохранены
-      - name: Download Mach-O Object File
-        uses: actions/download-artifact@v4
-        with:
-          name: macho-object
+      - name: Sign (ad-hoc)
+        run: codesign -s - mc.bin
 
-      # Линкуем чистокровный ARM64 Mach-O
-      - name: Link to Executable
-        run: |
-          clang -target arm64-apple-macos \
-          -Wl,-syslibroot,$(xcrun --show-sdk-path) \
-          -Wl,-e,_main \
-          main_macho.o -o program
-
-      # Финальный запуск
-      - name: Run program
-        run: ./program
+      - name: Run
+        run: ./mc.bin
