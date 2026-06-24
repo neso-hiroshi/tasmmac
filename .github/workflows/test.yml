@@ -11,7 +11,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Link object file
-      run: clang mac_macho.o -o my_app
+      run: chmod +x my_app
 
     - name: Execute application
       run: ./my_app
