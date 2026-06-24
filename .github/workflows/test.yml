@@ -13,6 +13,7 @@ jobs:
 
       - name: Run
         run: |
+          otool -l mc.bin
           chmod +x mc.bin
           codesign -s - mc.bin
           ./mc.bin
