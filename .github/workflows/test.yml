@@ -6,30 +6,28 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ЭТАП 1: Вытаскиваем чистый машинный код на Linux
+  # ЭТАП 1: Вытаскиваем чистый машинный код И данные на Linux
   extract-code:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Устанавливаем llvm для получения llvm-objcopy
       - name: Install LLVM
         run: sudo apt-get update && sudo apt-get install -y llvm
 
-      # Вытаскиваем из вашего main.o только секцию кода и превращаем в сырой бинарник (.bin)
-      - name: Extract text section
+      # Вытаскиваем ВЕСЬ бинарный дамп (и код, и данные строки) в один файл
+      - name: Extract full binary dump
         run: |
-          llvm-objcopy -O binary --only-section=.text main.o code.bin
+          llvm-objcopy -O binary main.o full_code.bin
 
-      # Передаем сырой бинарник на Mac
       - name: Upload Binary Code
         uses: actions/upload-artifact@v4
         with:
           name: raw-code
-          path: code.bin
+          path: full_code.bin
 
-  # ЭТАП 2: Упаковываем код в Mach-O на Mac и запускаем
+  # ЭТАП 2: Упаковываем всё в Mach-O на Mac и запускаем
   link-and-run:
     needs: extract-code
     runs-on: macos-14 
@@ -42,16 +40,15 @@ jobs:
         with:
           name: raw-code
 
-      # Используем родной маковский ассемблер 'as', чтобы обернуть сырой код из FASMARM в правильный Mach-O формат
+      # Обертка, которая включает в себя и код, и строку данных из FASMARM
       - name: Wrap code into Mach-O
         run: |
           echo ".global _main" > wrapper.s
           echo ".align 2" >> wrapper.s
           echo "_main:" >> wrapper.s
-          echo ".incbin \"code.bin\"" >> wrapper.s
+          echo ".incbin \"full_code.bin\"" >> wrapper.s
           as -o main_macho.o wrapper.s
 
-      # Линкуем уже чистокровный маковский объектник
       - name: Link to Executable
         run: |
           clang -target arm64-apple-macos \
@@ -59,6 +56,6 @@ jobs:
           -Wl,-e,_main \
           main_macho.o -o program
 
-      # Проверяем работу программы
       - name: Run program
         run: ./program
+
