@@ -10,18 +10,29 @@ jobs:
     runs-on: macos-14 
 
     steps:
-      # 1. Просто скачиваем ваш репозиторий (вместе с готовым main.o)
+      # 1. Скачиваем репозиторий с вашим локальным main.o
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Пересобираем объектник ELF64 в нативный Mach-O ARM64 через Clang
-      - name: Cross-Link to Mach-O ARM64
+      # 2. Конвертируем структуру объектного файла из ELF64 в Mach-O ARM64
+      - name: Convert ELF64 to Mach-O
+        run: |
+          # В macOS утилиты LLVM лежат по специальному пути, находим llvm-objcopy
+          $(brew --prefix llvm)/bin/llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o 
+          # Если llvm через brew не установлен по умолчанию, используем встроенный в Xcode toolchain:
+          # xcrun llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o
+          
+          # Для максимальной надежности, если первый способ не найдет путь, используем xcrun:
+          xcrun llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o || $(brew --prefix llvm)/bin/llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o
+
+      # 3. Линкуем уже правильный Mach-O файл через Clang
+      - name: Link Mach-O to Executable
         run: |
           clang -target arm64-apple-macos \
           -Wl,-syslibroot,$(xcrun --show-sdk-path) \
           -Wl,-e,_main \
-          main.o -o program
+          main_macho.o -o program
 
-      # 3. Запускаем нативную ARM64 программу на сервере Apple Silicon
+      # 4. Запускаем нативную ARM64 программу
       - name: Run program
         run: ./program
