@@ -11,7 +11,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run without codesign
+      - name: Check SIP and codesign requirements
+        run: |
+          csrutil status || true
+          sw_vers
+          uname -a
+
+      - name: Try LC_UNIXTHREAD binary without codesign
         run: |
           chmod +x mc.bin
+          ./mc.bin
+
+      - name: Try with ad-hoc codesign
+        if: failure()
+        run: |
+          codesign -f -s - mc.bin
           ./mc.bin
