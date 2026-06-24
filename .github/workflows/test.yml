@@ -1,4 +1,4 @@
-name: Run macOS FASMARM ARM64 (Precompiled)
+name: Run macOS FASMARM ARM64
 
 on:
   push:
@@ -6,26 +6,44 @@ on:
   workflow_dispatch:
 
 jobs:
-  link-and-run:
-    runs-on: macos-14 
-
+  # ЭТАП 1: Конвертируем ваш готовый main.o на Linux
+  convert-on-linux:
+    runs-on: ubuntu-latest
     steps:
-      # 1. Скачиваем репозиторий с вашим локальным main.o
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Конвертируем структуру объектного файла из ELF64 в Mach-O ARM64
+      # Устанавливаем GNU Binutils, где есть мощный objcopy
+      - name: Install Binutils
+        run: sudo apt-get update && sudo apt-get install -y binutils-aarch64-linux-gnu
+
+      # Перезаписываем заголовок из ELF64 в Mach-O ARM64
       - name: Convert ELF64 to Mach-O
         run: |
-          # В macOS утилиты LLVM лежат по специальному пути, находим llvm-objcopy
-          $(brew --prefix llvm)/bin/llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o 
-          # Если llvm через brew не установлен по умолчанию, используем встроенный в Xcode toolchain:
-          # xcrun llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o
-          
-          # Для максимальной надежности, если первый способ не найдет путь, используем xcrun:
-          xcrun llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o || $(brew --prefix llvm)/bin/llvm-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o
+          aarch64-linux-gnu-objcopy -I elf64-littleaarch64 -O mach-o-arm64 main.o main_macho.o
 
-      # 3. Линкуем уже правильный Mach-O файл через Clang
+      # Сохраняем правильный маковский объектник в облако GitHub
+      - name: Upload Mach-O Object File
+        uses: actions/upload-artifact@v4
+        with:
+          name: macho-object
+          path: main_macho.o
+
+  # ЭТАП 2: Линкуем и запускаем на реальном Mac
+  link-and-run-on-mac:
+    needs: convert-on-linux # Ждем, пока Linux сделает свою работу
+    runs-on: macos-14 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Скачиваем готовый маковский файл из облака GitHub
+      - name: Download Mach-O Object File
+        uses: actions/download-artifact@v4
+        with:
+          name: macho-object
+
+      # Линкуем чистый Mach-O без ошибок типов файлов
       - name: Link Mach-O to Executable
         run: |
           clang -target arm64-apple-macos \
@@ -33,6 +51,6 @@ jobs:
           -Wl,-e,_main \
           main_macho.o -o program
 
-      # 4. Запускаем нативную ARM64 программу
+      # Запускаем готовую программу
       - name: Run program
         run: ./program
