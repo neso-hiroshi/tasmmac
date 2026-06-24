@@ -1,0 +1,28 @@
+name: Run macOS ARM64 ASM
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Позволяет запускать сборку вручную кнопкой
+
+jobs:
+  build-and-run:
+    # Важно: macos-14 и выше работают строго на процессорах Apple Silicon (ARM64)
+    runs-on: macos-14 
+
+    steps:
+      # 1. Скачиваем файлы из репозитория на виртуальную машину
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Компилируем исходный код в объектный файл Mach-O
+      - name: Assemble code
+        run: as -o main.o main.s
+
+      # 3. Линкуем файл, подключая системную библиотеку Mac
+      - name: Link object file
+        run: ld -o program main.o -lSystem -syslibroot $(xcrun --show-sdk-path)
+
+      # 4. Запускаем получившийся бинарник и смотрим вывод
+      - name: Run program
+        run: ./program
