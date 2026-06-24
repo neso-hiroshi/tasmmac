@@ -13,7 +13,25 @@ jobs:
 
       - name: Run
         run: |
-          otool -l mc.bin
           chmod +x mc.bin
           codesign -s - mc.bin
           ./mc.bin
+  - name: Dissect a working gas binary
+    run: |
+      cat > exit.s << 'ASM'
+      .global _main
+      .align 2
+      _main:
+        mov x0, #0
+        mov x16, #1
+        movk x16, #0x200, lsl #16
+        svc #0x80
+      ASM
+      as -o exit.o exit.s
+      ld -o exit_bin exit.o -lSystem \
+        -syslibroot $(xcrun -sdk macosx --show-sdk-path) \
+        -e _main -arch arm64
+      echo "=== otool -hv ==="
+      otool -hv exit_bin
+      echo "=== otool -l ==="
+      otool -l exit_bin
