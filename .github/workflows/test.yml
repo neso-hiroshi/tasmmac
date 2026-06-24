@@ -5,25 +5,26 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: macos-latest
-
+  test-macos13:
+    runs-on: macos-13-xlarge
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check SIP and codesign requirements
-        run: |
-          csrutil status || true
-          sw_vers
-          uname -a
-
-      - name: Try LC_UNIXTHREAD binary without codesign
+      - name: info
+        run: sw_vers && uname -m
+      - name: run
         run: |
           chmod +x mc.bin
+          codesign -s - mc.bin
           ./mc.bin
 
-      - name: Try with ad-hoc codesign
-        if: failure()
+  test-macos14:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: info
+        run: sw_vers && uname -m
+      - name: run
         run: |
-          codesign -f -s - mc.bin
+          chmod +x mc.bin
+          codesign -s - mc.bin
           ./mc.bin
