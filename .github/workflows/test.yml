@@ -1,28 +1,39 @@
-name: Run macOS ARM64 ASM
+name: Run macOS FASMARM ARM64
 
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Позволяет запускать сборку вручную кнопкой
+  workflow_dispatch:
 
 jobs:
   build-and-run:
-    # Важно: macos-14 и выше работают строго на процессорах Apple Silicon (ARM64)
     runs-on: macos-14 
 
     steps:
-      # 1. Скачиваем файлы из репозитория на виртуальную машину
+      # 1. Скачиваем ваш репозиторий
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Компилируем исходный код в объектный файл Mach-O
-      - name: Assemble code
-        run: as -o main.o main.s
+      # 2. Скачиваем и распаковываем конкретно FASMARM
+      - name: Install FASMARM
+        run: |
+          curl -L https://arm.flatassembler.net/FASMARM_full.ZIP -o fasmarm.zip
+          unzip fasmarm.zip -d fasmarm_dir
+          # Даем права на исполнение бинарнику fasmarm
+          chmod +x fasmarm_dir/fasmarm
 
-      # 3. Линкуем файл, подключая системную библиотеку Mac
-      - name: Link object file
-        run: ld -o program main.o -lSystem -syslibroot $(xcrun --show-sdk-path)
+      # 3. Компилируем asm в объектный файл (ELF64 ARM64)
+      - name: Assemble with FASMARM
+        run: ./fasmarm_dir/fasmarm main.asm main.o
 
-      # 4. Запускаем получившийся бинарник и смотрим вывод
+      # 4. Линкуем ELF64 объектник в нативный Mach-O ARM64 через Clang
+      - name: Cross-Link to Mach-O ARM64
+        run: |
+          clang -target arm64-apple-macos \
+          -Wl,-syslibroot,$(xcrun --show-sdk-path) \
+          -Wl,-e,_main \
+          main.o -o program
+
+      # 5. Запускаем нативную ARM64 программу на сервере Apple Silicon
       - name: Run program
         run: ./program
