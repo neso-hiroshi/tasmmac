@@ -6,22 +6,59 @@ on:
   workflow_dispatch:
 
 jobs:
-  link-and-run:
-    runs-on: macos-14 
+  # ЭТАП 1: Вытаскиваем чистый машинный код на Linux
+  extract-code:
+    runs-on: ubuntu-latest
     steps:
-      # 1. Скачиваем ваш репозиторий с готовым файлом main.o
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Линкуем ELF64 файл напрямую через Clang, заставляя его проигнорировать тип заголовка
-      - name: Link ELF64 to Mach-O
+      # Устанавливаем llvm для получения llvm-objcopy
+      - name: Install LLVM
+        run: sudo apt-get update && sudo apt-get install -y llvm
+
+      # Вытаскиваем из вашего main.o только секцию кода и превращаем в сырой бинарник (.bin)
+      - name: Extract text section
+        run: |
+          llvm-objcopy -O binary --only-section=.text main.o code.bin
+
+      # Передаем сырой бинарник на Mac
+      - name: Upload Binary Code
+        uses: actions/upload-artifact@v4
+        with:
+          name: raw-code
+          path: code.bin
+
+  # ЭТАП 2: Упаковываем код в Mach-O на Mac и запускаем
+  link-and-run:
+    needs: extract-code
+    runs-on: macos-14 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Binary Code
+        uses: actions/download-artifact@v4
+        with:
+          name: raw-code
+
+      # Используем родной маковский ассемблер 'as', чтобы обернуть сырой код из FASMARM в правильный Mach-O формат
+      - name: Wrap code into Mach-O
+        run: |
+          echo ".global _main" > wrapper.s
+          echo ".align 2" >> wrapper.s
+          echo "_main:" >> wrapper.s
+          echo ".incbin \"code.bin\"" >> wrapper.s
+          as -o main_macho.o wrapper.s
+
+      # Линкуем уже чистокровный маковский объектник
+      - name: Link to Executable
         run: |
           clang -target arm64-apple-macos \
           -Wl,-syslibroot,$(xcrun --show-sdk-path) \
           -Wl,-e,_main \
-          -Wl,-pagezero_size,10000 \
-          main.o -o program
+          main_macho.o -o program
 
-      # 3. Проверяем работу на реальном Apple Silicon
+      # Проверяем работу программы
       - name: Run program
         run: ./program
