@@ -1,18 +1,40 @@
-name: Link and Run Mach-O
+name: Test Precompiled Binary
 
-on: [push, workflow_dispatch]
+on: [push, pull_request]
 
 jobs:
-  link-job:
-    runs-on: macos-latest
-    
+  test-binary:
+    runs-on: windows-latest
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      # 1. Скачиваем готовый .exe из репозитория
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Link object file
-      run: chmod +x my_app
+      # 2. Запускаем готовый файл и проверяем текстовый вывод
+      - name: Test Output
+        shell: powershell
+        run: |
+          # Предполагается, что файл лежит в корне репозитория и называется hello_sys.exe
+          $output = .\win.exe | Out-String
+          $output = $output.Trim()
+          
+          Write-Host "Вывод программы: '$output'"
+          
+          if ($output -eq "Hello, World!") {
+              Write-Host "Успех! Строка совпала."
+          } else {
+              Write-Error "Провал! Вывод не тот или пустой."
+              exit 1
+          }
 
-    - name: Execute application
-      run: ./my_app
+      # 3. На всякий случай проверяем код возврата (должен быть 0)
+      - name: Test Exit Code
+        shell: powershell
+        run: |
+          $process = Start-Process -FilePath ".\hello_sys.exe" -NoNewWindow -PassThru -Wait
+          if ($process.ExitCode -ne 0) {
+              Write-Error "Программа упала с кодом $($process.ExitCode)"
+              exit 1
+          }
 
