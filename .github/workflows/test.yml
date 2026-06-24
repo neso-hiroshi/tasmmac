@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ЭТАП 1: Разделяем код и данные на Linux без нарушения структуры вашего main.o
   extract-sections:
     runs-on: ubuntu-latest
     steps:
@@ -16,13 +15,12 @@ jobs:
       - name: Install LLVM
         run: sudo apt-get update && sudo apt-get install -y llvm
 
-      # Вытаскиваем отдельно чистый код и отдельно чистую строку данных
+      # Вырезаем секции чисто, как они есть
       - name: Extract sections
         run: |
           llvm-objcopy -O binary --only-section=.text main.o text.bin
           llvm-objcopy -O binary --only-section=.data main.o data.bin
 
-      # Передаем оба файла на Mac
       - name: Upload Binary Sections
         uses: actions/upload-artifact@v4
         with:
@@ -31,7 +29,6 @@ jobs:
             text.bin
             data.bin
 
-  # ЭТАП 2: Собираем правильный Mach-O на Mac с раздельными секциями
   link-and-run:
     needs: extract-sections
     runs-on: macos-14 
@@ -44,26 +41,24 @@ jobs:
         with:
           name: raw-sections
 
-      # Создаем маковский ассемблерный файл, который раскладывает всё по полочкам
-      - name: Wrap code and data into Mach-O
+      # ХИТРЫЙ ТРЮК: Мы склеиваем их в ОДНУ маковскую секцию .text.
+      # На маке секция .text по умолчанию доступна и для чтения (нашего текста).
+      # Это восстановит оригинальное взаимное расположение кода и данных!
+      - name: Wrap code and data into single section
         run: |
           echo ".global _main" > wrapper.s
-          
-          # Кладем код в секцию исполнения __TEXT
           echo ".text" >> wrapper.s
           echo ".align 2" >> wrapper.s
           echo "_main:" >> wrapper.s
           echo ".incbin \"text.bin\"" >> wrapper.s
           
-          # Кладем строку в секцию данных __DATA
-          echo ".data" >> wrapper.s
-          echo ".align 2" >> wrapper.s
+          # Мы НЕ пишем ".data". Мы пишем метку прямо внутри кода, 
+          # чтобы данные приклеились вплотную к концу кода, как в ELF
           echo "msg:" >> wrapper.s
           echo ".incbin \"data.bin\"" >> wrapper.s
           
           as -o main_macho.o wrapper.s
 
-      # Линкуем чистокровный маковский файл
       - name: Link to Executable
         run: |
           clang -target arm64-apple-macos \
@@ -71,6 +66,5 @@ jobs:
           -Wl,-e,_main \
           main_macho.o -o program
 
-      # Запускаем нативную программу
       - name: Run program
         run: ./program
