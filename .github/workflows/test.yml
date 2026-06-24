@@ -13,7 +13,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Просто конвертируем ваш готовый main.o из репозитория
+      # Устанавливаем llvm, чтобы команда llvm-objcopy стала доступна
+      - name: Install LLVM Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm
+
+      # Конвертируем ваш готовый main.o из репозитория
       - name: Convert ELF64 to Mach-O using LLVM
         run: |
           llvm-objcopy --input-target=elf64-littleaarch64 --output-target=mach-o-arm64 main.o main_macho.o
