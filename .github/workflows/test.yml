@@ -13,15 +13,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Сборка objconv из стабильного исходного кода
+      # Сборка objconv напрямую из исходников репозитория
       - name: Build Objconv from Source Mirror
         run: |
-          sudo apt-get update && sudo apt-get install -y g++ git unzip
-      
-          git clone https://github.com/staticfloat/objconv.git objconv_repo
+          sudo apt-get update && sudo apt-get install -y g++ git
+          
+          # !!! НЕ ЗАБУДЬ ПОМЕНЯТЬ НИЖНЕЕ ПОДЧЕРКИВАНИЕ НА ТОЧКУ НИЖЕ !!!
+          git clone https://github_com/staticfloat/objconv.git objconv_repo
           
           cd objconv_repo
-          unzip source.zip
+          # Компилируем исходники, которые уже лежат в папке src
           g++ -o objconv -O2 src/*.cpp
           cp objconv ../objconv
           cd ..
