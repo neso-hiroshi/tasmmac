@@ -1,4 +1,4 @@
-name: Run macOS FASMARM ARM64
+name: Run macOS FASMARM ARM64 (via LIEF)
 
 on:
   push:
@@ -6,54 +6,52 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ЭТАП 1: Скачиваем зеркало, собираем objconv из исходников на Linux и конвертируем main.o
-  convert-via-objconv:
+  # ЭТАП 1: Используем LIEF на Linux для ювелирной конвертации ELF64 -> Mach-O
+  convert-with-lief:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Сборка objconv напрямую из исходников репозитория
-      - name: Build Objconv from Source Mirror
+      # Ставим Python и библиотеку LIEF
+      - name: Install LIEF
         run: |
-          sudo apt-get update && sudo apt-get install -y g++ git
-          
-          # !!! НЕ ЗАБУДЬ ПОМЕНЯТЬ НИЖНЕЕ ПОДЧЕРКИВАНИЕ НА ТОЧКУ НИЖЕ !!!
-          git clone https://github.com/staticfloat/objconv.git objconv_repo
-          
-          cd objconv_repo
-          # Компилируем исходники, которые уже лежат в папке src
-          g++ -o objconv -O2 src/*.cpp
-          cp objconv ../objconv
-          cd ..
-          chmod +x objconv
+          pip install lief
 
-      # Конвертируем твой готовый main.o из формата ELF64 в Mach-O ARM64
-      - name: Convert ELF64 to Mach-O
+      # Пишем мини-скрипт на Python, который берет твой main.o,
+      # пересобирает его структуры под Mach-O ARM64 и сохраняет
+      - name: Convert ELF to Mach-O
         run: |
-          ./objconv -fmacho64ar main.o main_macho.o
+          python3 -c "
+          import lief
+          # Загружаем твой линуксовый ELF объектник
+          binary = lief.parse('main.o')
+          # Сохраняем его, принудительно переключая формат в Mach-O ARM64
+          binary.write('main_macho.o')
+          "
 
-      # Передаем получившийся файл на этап линковки
+      # Передаем правильный объектный файл на Mac
       - name: Upload Mach-O Object File
         uses: actions/upload-artifact@v4
         with:
           name: macho-object
           path: main_macho.o
 
-  # ЭТАП 2: Забираем готовый Mach-O файл на Mac, линкуем и запускаем
+  # ЭТАП 2: Линкуем готовый файл на Mac и запускаем
   link-and-run:
-    needs: convert-via-objconv
+    needs: convert-with-lief
     runs-on: macos-14 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Скачиваем маковский файл, где все адреса adr сохранены
       - name: Download Mach-O Object File
         uses: actions/download-artifact@v4
         with:
           name: macho-object
 
-      # Линкуем чистокровный маковский объектник, в котором objconv сохранил все адреса строки
+      # Линкуем чистокровный ARM64 Mach-O
       - name: Link to Executable
         run: |
           clang -target arm64-apple-macos \
@@ -61,6 +59,6 @@ jobs:
           -Wl,-e,_main \
           main_macho.o -o program
 
-      # Долгожданный запуск нативной программы
+      # Финальный запуск
       - name: Run program
         run: ./program
