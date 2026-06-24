@@ -6,52 +6,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ЭТАП 1: Берём ваш готовый main.o и меняем ему формат на Linux
-  convert-to-macho:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Устанавливаем llvm, чтобы команда llvm-objcopy стала доступна
-      - name: Install LLVM Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm
-
-      # Конвертируем ваш готовый main.o из репозитория
-      - name: Convert ELF64 to Mach-O using LLVM
-        run: |
-          llvm-objcopy --input-target=elf64-littleaarch64 --output-target=mach-o-arm64 main.o main_macho.o
-
-      # Передаем получившийся файл на следующий этап
-      - name: Upload Mach-O Object File
-        uses: actions/upload-artifact@v4
-        with:
-          name: macho-object
-          path: main_macho.o
-
-  # ЭТАП 2: Забираем готовый файл на Mac, линкуем и запускаем
   link-and-run:
-    needs: convert-to-macho
     runs-on: macos-14 
     steps:
+      # 1. Скачиваем ваш репозиторий с готовым файлом main.o
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Mach-O Object File
-        uses: actions/download-artifact@v4
-        with:
-          name: macho-object
-
-      # Линкуем чистый, подготовленный Mach-O
-      - name: Link Mach-O to Executable
+      # 2. Линкуем ELF64 файл напрямую через Clang, заставляя его проигнорировать тип заголовка
+      - name: Link ELF64 to Mach-O
         run: |
           clang -target arm64-apple-macos \
           -Wl,-syslibroot,$(xcrun --show-sdk-path) \
           -Wl,-e,_main \
-          main_macho.o -o program
+          -Wl,-pagezero_size,10000 \
+          main.o -o program
 
-      # Проверяем работу на реальном Apple Silicon
+      # 3. Проверяем работу на реальном Apple Silicon
       - name: Run program
         run: ./program
