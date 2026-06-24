@@ -1,4 +1,4 @@
-name: Run macOS FASMARM ARM64
+name: Run macOS FASMARM ARM64 (via Objconv)
 
 on:
   push:
@@ -6,59 +6,51 @@ on:
   workflow_dispatch:
 
 jobs:
-  extract-sections:
+  # ЭТАП 1: Конвертируем файл на Linux через objconv
+  convert-via-objconv:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install LLVM
-        run: sudo apt-get update && sudo apt-get install -y llvm
-
-      # Вырезаем секции чисто, как они есть
-      - name: Extract sections
+      # Скачиваем и компилируем утилиту objconv
+      - name: Build objconv tool
         run: |
-          llvm-objcopy -O binary --only-section=.text main.o text.bin
-          llvm-objcopy -O binary --only-section=.data main.o data.bin
+          sudo apt-get update && sudo apt-get install -y g++ unzip
+          curl -L https://github.com -o objconv.zip
+          unzip objconv.zip
+          cd objconv-master
+          # Компилируем исходники objconv
+          g++ -o objconv -O2 src/*.cpp
+          cp objconv ../
+          cd ..
 
-      - name: Upload Binary Sections
+      # Нативная конвертация: из ELF64 (-felf64) в Mach-O ARM64 (-fmacho64)
+      # Внимание: objconv идеально перенесет все относительные адреса (adr)
+      - name: Convert ELF64 to Mach-O
+        run: |
+          ./objconv -fmacho64 main.o main_macho.o
+
+      - name: Upload Mach-O Object File
         uses: actions/upload-artifact@v4
         with:
-          name: raw-sections
-          path: |
-            text.bin
-            data.bin
+          name: macho-object
+          path: main_macho.o
 
+  # ЭТАП 2: Линкуем готовый Mach-O на Mac
   link-and-run:
-    needs: extract-sections
+    needs: convert-via-objconv
     runs-on: macos-14 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Binary Sections
+      - name: Download Mach-O Object File
         uses: actions/download-artifact@v4
         with:
-          name: raw-sections
+          name: macho-object
 
-      # ХИТРЫЙ ТРЮК: Мы склеиваем их в ОДНУ маковскую секцию .text.
-      # На маке секция .text по умолчанию доступна и для чтения (нашего текста).
-      # Это восстановит оригинальное взаимное расположение кода и данных!
-      - name: Wrap code and data into single section
-        run: |
-          echo ".global _main" > wrapper.s
-          echo ".text" >> wrapper.s
-          echo ".align 2" >> wrapper.s
-          echo "_main:" >> wrapper.s
-          echo ".incbin \"text.bin\"" >> wrapper.s
-          
-          # Мы НЕ пишем ".data". Мы пишем метку прямо внутри кода, 
-          # чтобы данные приклеились вплотную к концу кода, как в ELF
-          echo "msg:" >> wrapper.s
-          echo ".incbin \"data.bin\"" >> wrapper.s
-          
-          as -o main_macho.o wrapper.s
-
+      # Линкуем чистокровный маковский объектник, созданный через objconv
       - name: Link to Executable
         run: |
           clang -target arm64-apple-macos \
