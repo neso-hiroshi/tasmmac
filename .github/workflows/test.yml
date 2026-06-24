@@ -19,7 +19,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y g++ git
           
           # !!! НЕ ЗАБУДЬ ПОМЕНЯТЬ НИЖНЕЕ ПОДЧЕРКИВАНИЕ НА ТОЧКУ НИЖЕ !!!
-          git clone https://github_com/staticfloat/objconv.git objconv_repo
+          git clone https://github.com/staticfloat/objconv.git objconv_repo
           
           cd objconv_repo
           # Компилируем исходники, которые уже лежат в папке src
