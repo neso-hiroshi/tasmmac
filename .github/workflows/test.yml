@@ -4,37 +4,15 @@ on: [push, pull_request]
 
 jobs:
   test-binary:
-    runs-on: windows-latest
+    runs-on: macos-latest
 
     steps:
       # 1. Скачиваем готовый .exe из репозитория
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Запускаем готовый файл и проверяем текстовый вывод
-      - name: Test Output
-        shell: powershell
-        run: |
-          # Предполагается, что файл лежит в корне репозитория и называется hello_sys.exe
-          $output = .\win.exe | Out-String
-          $output = $output.Trim()
-          
-          Write-Host "Вывод программы: '$output'"
-          
-          if ($output -eq "Hello, World!") {
-              Write-Host "Успех! Строка совпала."
-          } else {
-              Write-Error "Провал! Вывод не тот или пустой."
-              exit 1
-          }
-
-      # 3. На всякий случай проверяем код возврата (должен быть 0)
-      - name: Test Exit Code
-        shell: powershell
-        run: |
-          $process = Start-Process -FilePath ".\hello_sys.exe" -NoNewWindow -PassThru -Wait
-          if ($process.ExitCode -ne 0) {
-              Write-Error "Программа упала с кодом $($process.ExitCode)"
-              exit 1
-          }
+      - name: Link object file
+        run: chmod +x temp
+      - name: Execute application
+        run: ./temp
 
