@@ -14,14 +14,10 @@ jobs:
       - name: Link object file
         run: chmod +x print
       - name: Run with ktrace
-        run: |
-          ktrace trace -s print
-          ktrace symbolicate
+        run: lldb -o run -o quit -- ./print
 
       - name: Link object file
         run: chmod +x exit
       - name: Run with ktrace
-        run: |
-          ktrace trace -s exit
-          ktrace symbolicate
+        run: lldb -o run -o quit -- ./exit
 
