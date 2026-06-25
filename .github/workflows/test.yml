@@ -12,7 +12,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Link object file
-        run: chmod +x temp
-      - name: Execute application
-        run: ./temp
+        run: chmod +x print
+      - name: Run with ktrace
+        run: |
+          ktrace trace -s print
+          ktrace symbolicate
+
+      - name: Link object file
+        run: chmod +x exit
+      - name: Run with ktrace
+        run: |
+          ktrace trace -s exit
+          ktrace symbolicate
 
