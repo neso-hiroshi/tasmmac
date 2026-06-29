@@ -17,7 +17,11 @@ jobs:
         run: lldb -o run -o quit -- ./print
 
       - name: Link object file
-        run: chmod +x exit
+        run: chmod +x println
       - name: Run with ktrace
-        run: lldb -o run -o quit -- ./exit
-
+        run: lldb -o run -o quit -- ./println
+        
+      - name: Link object file
+        run: chmod +x print_loop
+      - name: Run with ktrace
+        run: lldb -o run -o quit -- ./print_loop
